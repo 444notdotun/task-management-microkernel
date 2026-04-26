@@ -1,0 +1,164 @@
+# Task Management App — Chapter 3: Microkernel Architecture
+
+Part of a 5-chapter series building one Task Management Platform across 5 architecture patterns.
+
+**Book:** Software Architecture Patterns — Mark Richards
+**Chapter:** 3 — Microkernel Architecture
+**Author:** Adedotun Adewole Stephen
+**GitHub:** github.com/444notdotun
+
+---
+
+## What This Chapter Covers
+
+Implementing the Microkernel (Plugin) Architecture pattern by building a notification system where delivery channels are plugins that plug into a stable core engine — with no changes to the core when new channels are added.
+
+The notification system also applies the **Strategy Pattern** under the hood — each plugin is an interchangeable strategy for delivering a notification.
+
+---
+
+## Architecture
+
+```
+CORE SYSTEM
+└── NotificationManager
+      └── Map<String, NotificationPlugin>
+            ├── EMAIL_NOTIFICATION → GmailSender
+            └── SMS_NOTIFICATION   → SmsNotification
+
+EVENT FLOW (EDA layer)
+UserService
+  → publishes UserRegisteredEvent
+    → UserRegistrationConsumer (async)
+      → builds NotificationRequest (type = EMAIL)
+        → NotificationManager routes to GmailSender
+          → email delivered via JavaMailSender
+
+UserService
+  → publishes PasswordChangedEvent
+    → UserRegistrationConsumer (async)
+      → builds NotificationRequest (type = SMS)
+        → NotificationManager routes to SmsNotification
+          → SMS delivered via Termii API
+
+AUDIT
+Every notification → AuditLog saved to PostgreSQL
+```
+
+---
+
+## Tech Stack
+
+- Java 17
+- Spring Boot 3
+- Spring Events (ApplicationEventPublisher)
+- Spring Data JPA
+- PostgreSQL
+- JavaMailSender (Gmail SMTP)
+- Termii SMS API
+- Maven
+
+---
+
+## Patterns Applied
+
+| Pattern | Where |
+|---------|-------|
+| Microkernel | NotificationManager + plugin registry |
+| Strategy | NotificationPlugin interface + interchangeable implementations |
+| EDA | Spring Events for async decoupled communication |
+| Dependency Injection | Spring wires all plugins into Map at startup |
+| Audit Log | Every notification event recorded to PostgreSQL |
+
+---
+
+## How Plugins Are Registered
+
+Spring automatically injects all `NotificationPlugin` implementations into a `Map<String, NotificationPlugin>` using the `@Component` bean name as the key.
+
+```java
+// Plugin registration — zero manual wiring needed
+@Component("EMAIL_NOTIFICATION")
+public class GmailSender implements NotificationPlugin { ... }
+
+@Component("SMS_NOTIFICATION")
+public class SmsNotification implements NotificationPlugin { ... }
+
+// Core system — Spring injects the map automatically
+public NotificationManager(Map<String, NotificationPlugin> notificationPluginMap) {
+    this.notificationPluginMap = notificationPluginMap;
+}
+```
+
+To add a new channel — write a new class, annotate it with `@Component("PUSH_NOTIFICATION")`. Zero changes to `NotificationManager`.
+
+---
+
+## Project Structure
+
+```
+src/
+├── core/
+│   ├── NotificationPlugin.java       ← interface (the contract)
+│   └── NotificationManager.java      ← core engine
+├── plugins/
+│   ├── GmailSender.java              ← EMAIL plugin
+│   └── SmsNotification.java          ← SMS plugin (Termii)
+├── consumer/
+│   └── UserRegistrationConsumer.java ← event listener, builds NotificationRequest
+├── events/
+│   ├── UserRegisteredEvent.java
+│   └── PasswordChangedEvent.java
+├── dtos/
+│   └── request/
+│       └── NotificationRequest.java  ← carries all notification data
+├── data/
+│   ├── model/
+│   │   ├── Audit.java
+│   │   └── NotificationPlugInTypes.java
+│   └── repository/
+│       └── AuditLog.java
+└── service/
+    └── UserService.java
+```
+
+---
+
+## How to Run
+
+```bash
+git clone https://github.com/444notdotun/task-management-microkernel
+cd task-management-microkernel
+```
+
+Set environment variables:
+
+```properties
+POSTGRES_URL=jdbc:postgresql://localhost:5432/microkernel_db
+POSTGRES_USERNAME=your_username
+POSTGRES_PASSWORD=your_password
+SMTP_HOST=smtp.gmail.com
+SMTP_USERNAME=yourgmail@gmail.com
+SMTP_PASSWORD=your_app_password
+SMTP_PORT=587
+TERMII_API_KEY=your_termii_api_key
+TERMII_SENDER_ID=your_sender_id
+```
+
+Run:
+
+```bash
+./mvnw spring-boot:run
+```
+
+---
+
+## Chapters in This Series
+
+| Chapter | Pattern | Status |
+|---------|---------|--------|
+| 1 | Layered Architecture | ✅ Done |
+| 2 | Event-Driven Architecture | ✅ Done |
+| 3 | Microkernel Architecture | ✅ Done |
+| 4 | Microservices | ⏳ Next |
+| 5 | Space-Based Architecture | ⏳ Upcoming |
